@@ -1,8 +1,10 @@
-<?php $this->pageTitle=Yii::app()->name . ' - '.UserModule::t("Login"); ?>
+<?php 
+printf('<h2> %s </h2>', $title); 
+printf('<p> %s </p>', $content); 
 
-<h1><?php echo $title; ?></h1>
 
-<div class="form">
-<?php echo $content; ?>
+if (isset($partial) && is_array($partial) && $partial != array())
+	foreach ($partial as $p)
+		echo (isset($p['params'])) ? $this->renderPartial($p['view'], $p['params']) : $this->renderPartial($p['view']);
 
-</div><!-- yiiForm -->
+?>

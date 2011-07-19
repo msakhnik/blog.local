@@ -1,240 +1,224 @@
 <?php
-/**
- * Yii-User module
- * 
- * @author Mikhail Mangushev <mishamx@gmail.com> 
- * @link http://yii-user.googlecode.com/
- * @license http://www.opensource.org/licenses/bsd-license.php
- * @version $Id: UserModule.php 105 2011-02-16 13:05:56Z mishamx $
- */
+Yii::setPathOfAlias('YumModule' , dirname(__FILE__));
+Yii::setPathOfAlias('YumComponents' , dirname(__FILE__) . '/components/');
+Yii::setPathOfAlias('YumAssets' , dirname(__FILE__) . '/assets/');
 
-class UserModule extends CWebModule
-{
-	/**
-	 * @var int
-	 * @desc items on page
-	 */
-	public $user_page_size = 10;
-	
-	/**
-	 * @var int
-	 * @desc items on page
-	 */
-	public $fields_page_size = 10;
-	
-	/**
-	 * @var string
-	 * @desc hash method (md5,sha1 or algo hash function http://www.php.net/manual/en/function.hash.php)
-	 */
-	public $hash='md5';
-	
-	/**
-	 * @var boolean
-	 * @desc use email for activation user account
-	 */
-	public $sendActivationMail=true;
-	
-	/**
-	 * @var boolean
-	 * @desc allow auth for is not active user
-	 */
-	public $loginNotActiv=false;
-	
-	/**
-	 * @var boolean
-	 * @desc activate user on registration (only $sendActivationMail = false)
-	 */
-	public $activeAfterRegister=false;
-	
-	/**
-	 * @var boolean
-	 * @desc login after registration (need loginNotActiv or activeAfterRegister = true)
-	 */
-	public $autoLogin=true;
-	
-	public $registrationUrl = array("/user/registration");
-	public $recoveryUrl = array("/user/recovery/recovery");
-	public $loginUrl = array("/user/login");
-	public $logoutUrl = array("/user/logout");
-	public $profileUrl = array("/user/profile");
-	public $returnUrl = array("/user/profile");
-	public $returnLogoutUrl = array("/user/login");
-	
-	public $fieldsMessage = '';
-	
-	/**
-	 * @var array
-	 * @desc User model relation from other models
-	 * @see http://www.yiiframework.com/doc/guide/database.arr
-	 */
-	public $relations = array();
-	
-	/**
-	 * @var array
-	 * @desc Profile model relation from other models
-	 */
-	public $profileRelations = array();
-	
-	/**
-	 * @var boolean
-	 */
-	public $captcha = array('registration'=>true);
-	
-	/**
-	 * @var boolean
-	 */
-	//public $cacheEnable = false;
-	
-	public $tableUsers = '{{users}}';
-	public $tableProfiles = '{{profiles}}';
-	public $tableProfileFields = '{{profiles_fields}}';
-	
-	static private $_user;
-	static private $_admin;
-	static private $_admins;
-	
-	/**
-	 * @var array
-	 * @desc Behaviors for models
-	 */
-	public $componentBehaviors=array();
-	
-	public function init()
-	{
-		// this method is called when the module is being created
-		// you may place code here to customize the module or the application
+Yii::import('YumModule.models.*');
+Yii::import('YumModule.controllers.YumController');
 
-		// import the module-level models and components
+class UserModule extends CWebModule {
+	public $version = '0.8-rc2';
+	public $debug = false;
+
+	//layout related control vars
+	public $baseLayout = 'application.views.layouts.main';
+	public $layout = 'application.modules.user.views.layouts.yum';
+	public $loginLayout = 'application.modules.user.views.layouts.yum';
+	public $adminLayout = 'application.modules.user.views.layouts.yum';
+
+	// configuration related control vars
+
+	public $enableLogging = true;
+	public $enableOnlineStatus = true; 
+	
+	// After how much seconds without an action does a user gets indicated as 
+	// offline? Note that, of course, clicking the Logout button will indicate
+	// him as offline instantly anyway.
+	public $offlineIndicationTime = 3600; // 5 Minutes
+
+	// set to false to enable case insensitive users.
+  // for example, demo and Demo would be the same user then
+	public $caseSensitiveUsers = true;
+
+	// set this to false if you do not want to access data through a REST
+	// api
+	public $enableRESTapi = true;
+
+	public $password_expiration_time = 30; // days
+	public $activationPasswordSet = false;
+	public $autoLogin = false;
+	public $activateFromWeb = true;
+	public $recoveryFromWeb = false;
+	public $mailer = 'yum'; // set to swift to active emailing by swiftMailer or PHPMailer to use PHPMailer as emailing lib.
+	public $phpmailer = null; // PHPMailer array options.
+
+	public $facebookConfig = false;
+	public $pageSize = 10;
+
+	// if you want the users to be able to edit their profile TEXTAREAs with an
+	// rich text Editor like CKEditor, set that here
+  public $rtepath = false; // Don't use an Rich text Editor
+  public $rteadapter = false; // Don't use an Adapter
+
+	public $salt = '';
+	 // valid callback function for password hashing ie. sha1
+	public $hashFunc = 'md5';
+
+	// Set this to true to really remove users instead of setting the status
+	// to -2 (YumUser::REMOVED)
+	public $trulyDelete = false;
+
+	public $yumBaseRoute = '/user';
+
+	public static $dateFormat = "m-d-Y";  //"d.m.Y H:i:s"
+	public $dateTimeFormat = 'm-d-Y G:i:s';  //"d.m.Y H:i:s"
+
+	// Use this to set dhcpOptions if using authentication over LDAP
+	public $ldapOptions = array(
+			'ldap_host' => '', 
+			'ldap_port' => '', 
+			'ldap_basedn' => '',
+			'ldap_protocol' => '',
+			'ldap_autocreate' => '',
+			'ldap_tls' => '',
+			'ldap_transfer_attr' => '',
+			'ldap_transfer_pw' => '');
+
+	private $_urls=array(
+			'login'=>array('//user/user'),
+			'return'=>array('//profile/profile/view'),
+			'firstVisit'=>array('//user/privacy/update'),
+			// Page to go after admin logs in
+			'returnAdmin'=>array('//user/statistics/index'),
+			// Page to go to after logout
+			'returnLogout'=>array('//user/user/login'));
+
+	private $_views = array(
+			'login' => '/user/login',
+			'menu' => '/user/menu',
+			'registration' => '/registration/registration',
+			'activate' => '/user/resend_activation',
+			'message' => '/user/message',
+			'recovery' => '/registration/recovery',
+			'passwordForm' => '/user/_activation_passwordform',
+			'recoveryChangePassword' =>'/user/changepassword',
+			'messageCompose' =>'application.modules.user.views.messages.compose');
+
+	// LoginType :
+	const LOGIN_BY_USERNAME		= 1;
+	const LOGIN_BY_EMAIL		= 2;
+	const LOGIN_BY_OPENID		= 4;
+	const LOGIN_BY_FACEBOOK		= 8;
+	const LOGIN_BY_TWITTER		= 16;
+	const LOGIN_BY_LDAP			= 32;
+	// Allow username and email login by default
+	public $loginType = 3;
+
+	/**
+	 * Defines all Controllers of the User Management Module and maps them to
+	 * shorter terms for using in the url
+	 * @var array
+	 */
+	public $controllerMap=array(
+		'default'=>array('class'=>'YumModule.controllers.YumDefaultController'),
+		'rest'=>array('class'=>'YumModule.controllers.YumRestController'),
+		'auth'=>array('class'=>'YumModule.controllers.YumAuthController'),
+		'install'=>array('class'=>'YumModule.controllers.YumInstallController'),
+		'statistics'=>array('class'=>'YumModule.controllers.YumStatisticsController'),
+		'user'=>array('class'=>'YumModule.controllers.YumUserController'),
+		// workaround to allow the url application/user/login:
+		'login'=>array('class'=>'YumModule.controllers.YumUserController')
+	);
+
+	// Table names
+	private $_tables = array(
+			'users' => 'users',
+			'privacySetting' => 'privacysetting',
+			'textSettings' => 'yumtextsettings',
+			'messages' => 'messages',
+			'usergroup' => 'usergroup',
+			'usergroupMessages' => 'usergroup_messages',
+			'profileFields' => 'profile_fields',
+			'profile' => 'profiles',
+			'profileComment' => 'profile_comment',
+			'profileVisit' => 'profile_visit',
+			'roles' => 'roles',
+			'membership' => 'membership',
+			'payment' => 'payment',
+			'friendship' => 'friendship',
+			'permission' => 'permission',
+			'action' => 'action',
+			'activity' => 'activities',
+			'userRole' => 'user_has_role',
+			'activity' => 'activities',
+			);
+
+	public $passwordRequirements = array(
+			'minLen' => 8,
+			'maxLen' => 32,
+			'minLowerCase' => 1,
+			'minUpperCase'=>0,
+			'minDigits' => 1,
+			'maxRepetition' => 3,
+			);
+
+	public $usernameRequirements=array(
+		'minLen'=>3,
+		'maxLen'=>30,
+		'match' => '/^[A-Za-z0-9_]+$/u',
+		'dontMatchMessage' => 'Incorrect symbol\'s. (A-z0-9)',
+	);
+
+	/**
+	 * Implements support for getting URLs, Tables and Views
+	 * @param string $name
+	 */
+	public function __get($name) {
+		if(substr($name, -3) === 'Url')
+			if(isset($this->_urls[substr($name, 0, -3)]))
+				return Yum::route($this->_urls[substr($name, 0, -3)]);
+
+		if(substr($name, -4) === 'View')
+			if(isset($this->_views[substr($name, 0, -4)]))
+				return $this->_views[substr($name, 0, -4)];
+
+		if(substr($name, -5) === 'Table')
+			if(isset($this->_tables[substr($name, 0, -5)]))
+				return $this->_tables[substr($name, 0, -5)];
+
+		return parent::__get($name);
+	}
+
+	/**
+	 * Implements support for setting URLs and Views
+	 * @param string $name
+	 * @param mixed $value
+	 */
+	public function __set($name,$value) {
+		if(substr($name,-3)==='Url') {
+			if(isset($this->_urls[substr($name,0,-3)]))
+				$this->_urls[substr($name,0,-3)]=$value;
+		}
+		if(substr($name,-4)==='View') {
+			if(isset($this->_views[substr($name,0,-4)]))
+				$this->_views[substr($name,0,-4)]=$value;
+		}
+		if(substr($name,-5)==='Table') {
+			if(isset($this->_tables[substr($name,0,-5)]))
+				$this->_tables[substr($name,0,-5)]=$value;
+		}
+
+		//parent::__set($name,$value);
+	}
+
+	public function init() {
 		$this->setImport(array(
-			'user.models.*',
-			'user.components.*',
+			'YumModule.controllers.*',
+			'YumModule.models.*',
+			'YumModule.components.*',
+			'YumModule.core.*',
 		));
 	}
-	
-	public function getBehaviorsFor($componentName){
-        if (isset($this->componentBehaviors[$componentName])) {
-            return $this->componentBehaviors[$componentName];
-        } else {
-            return array();
-        }
+
+	public function beforeControllerAction($controller, $action) {
+		// Do not enable Debug mode when in Production Mode
+		if(!defined('YII_DEBUG'))
+			$this->debug = false;
+
+		if(Yii::app()->user->isAdmin())
+			$controller->layout = Yum::module()->adminLayout;
+		
+		return parent::beforeControllerAction($controller, $action);
 	}
 
-	public function beforeControllerAction($controller, $action)
-	{
-		if(parent::beforeControllerAction($controller, $action))
-		{
-			// this method is called before any module controller action is performed
-			// you may place customized code here
-			return true;
-		}
-		else
-			return false;
-	}
-	
-	/**
-	 * @param $str
-	 * @param $params
-	 * @param $dic
-	 * @return string
-	 */
-	public static function t($str='',$params=array(),$dic='user') {
-		return Yii::t("UserModule.".$dic, $str, $params);
-	}
-	
-	/**
-	 * @return hash string.
-	 */
-	public static function encrypting($string="") {
-		$hash = Yii::app()->getModule('user')->hash;
-		if ($hash=="md5")
-			return md5($string);
-		if ($hash=="sha1")
-			return sha1($string);
-		else
-			return hash($hash,$string);
-	}
-	
-	/**
-	 * @param $place
-	 * @return boolean 
-	 */
-	public static function doCaptcha($place = '') {
-		if(!extension_loaded('gd'))
-			return false;
-		if (in_array($place, Yii::app()->getModule('user')->captcha))
-			return Yii::app()->getModule('user')->captcha[$place];
-		return false;
-	}
-	
-	/**
-	 * Return admin status.
-	 * @return boolean
-	 */
-	public static function isAdmin() {
-		if(Yii::app()->user->isGuest)
-			return false;
-		else {
-			if (!isset(self::$_admin)) {
-				if(self::user()->superuser)
-					self::$_admin = true;
-				else
-					self::$_admin = false;	
-			}
-			return self::$_admin;
-		}
-	}
-
-	/**
-	 * Return admins.
-	 * @return array syperusers names
-	 */	
-	public static function getAdmins() {
-		if (!self::$_admins) {
-			$admins = User::model()->active()->superuser()->findAll();
-			$return_name = array();
-			foreach ($admins as $admin)
-				array_push($return_name,$admin->username);
-			self::$_admins = $return_name;
-		}
-		return self::$_admins;
-	}
-	
-	/**
-	 * Send mail method
-	 */
-	public static function sendMail($email,$subject,$message) {
-    	$adminEmail = Yii::app()->params['adminEmail'];
-	    $headers = "MIME-Version: 1.0\r\nFrom: $adminEmail\r\nReply-To: $adminEmail\r\nContent-Type: text/html; charset=utf-8";
-	    $message = wordwrap($message, 70);
-	    $message = str_replace("\n.", "\n..", $message);
-	    return mail($email,'=?UTF-8?B?'.base64_encode($subject).'?=',$message,$headers);
-	}
-	
-	/**
-	 * Return safe user data.
-	 * @param user id not required
-	 * @return user object or false
-	 */
-	public static function user($id=0) {
-		if ($id) 
-			return User::model()->active()->findbyPk($id);
-		else {
-			if(Yii::app()->user->isGuest) {
-				return false;
-			} else {
-				if (!self::$_user)
-					self::$_user = User::model()->active()->findbyPk(Yii::app()->user->id);
-				return self::$_user;
-			}
-		}
-	}
-	
-	/**
-	 * Return safe user data.
-	 * @param user id not required
-	 * @return user object or false
-	 */
-	public function users() {
-		return User;
-	}
 }

@@ -1,79 +1,100 @@
 <?php
-$this->pageTitle=Yii::app()->name . ' - '.UserModule::t("Login");
-$this->breadcrumbs=array(
-	UserModule::t("Login"),
-);
+if(!isset($model)) 
+	$model = new YumUserLogin();
+
+$module = Yum::module();
+
+$this->pageTitle = Yii::app()->name . ' - '.Yum::t('Login');
+$this->title = Yum::t('Login');
+$this->breadcrumbs=array(Yum::t('Login'));
+
+Yum::renderFlash();
 ?>
 
-<h1><?php echo UserModule::t("Login"); ?></h1>
-
-<?php if(Yii::app()->user->hasFlash('loginMessage')): ?>
-
-<div class="success">
-	<?php echo Yii::app()->user->getFlash('loginMessage'); ?>
-</div>
-
-<?php endif; ?>
-
-<p><?php echo UserModule::t("Please fill out the following form with your login credentials:"); ?></p>
+<p>
+<?php 
+echo Yum::t(
+		'Please fill out the following form with your login credentials:'); ?>
+</p>
 
 <div class="form">
 <?php echo CHtml::beginForm(); ?>
 
-	<p class="note"><?php echo UserModule::t('Fields with <span class="required">*</span> are required.'); ?></p>
-	
-	<?php echo CHtml::errorSummary($model); ?>
+<?php echo CHtml::errorSummary($model); ?>
 	
 	<div class="row">
-		<?php echo CHtml::activeLabelEx($model,'username'); ?>
+		<?php 
+		if($module->loginType & UserModule::LOGIN_BY_USERNAME 
+				|| $module->loginType & UserModule::LOGIN_BY_LDAP)
+		echo CHtml::activeLabelEx($model,'username'); 
+		if($module->loginType & UserModule::LOGIN_BY_EMAIL)
+			printf ('<label for="YumUserLogin_username">%s <span class="required">*</span></label>', Yum::t('E-Mail address')); 
+		if($module->loginType & UserModule::LOGIN_BY_OPENID)
+			printf ('<label for="YumUserLogin_username">%s <span class="required">*</span></label>', Yum::t('OpenID username'));  ?>
+
 		<?php echo CHtml::activeTextField($model,'username') ?>
 	</div>
 	
 	<div class="row">
 		<?php echo CHtml::activeLabelEx($model,'password'); ?>
-		<?php echo CHtml::activePasswordField($model,'password') ?>
+		<?php echo CHtml::activePasswordField($model,'password');
+		if($module->loginType & UserModule::LOGIN_BY_OPENID)
+			echo '<br />'. Yum::t('When logging in with OpenID, password can be omitted');
+ ?>
+		
 	</div>
 	
 	<div class="row">
-		<p class="hint">
-		<?php echo CHtml::link(UserModule::t("Register"),Yii::app()->getModule('user')->registrationUrl); ?> | <?php echo CHtml::link(UserModule::t("Lost Password?"),Yii::app()->getModule('user')->recoveryUrl); ?>
-		</p>
-	</div>
-	
-	<div class="row rememberMe">
-		<?php echo CHtml::activeCheckBox($model,'rememberMe'); ?>
-		<?php echo CHtml::activeLabelEx($model,'rememberMe'); ?>
+	<p class="hint">
+	<?php 
+	if(Yum::hasModule('registration'))
+	echo CHtml::link(Yum::t("Registration"),
+			Yum::module('registration')->registrationUrl);
+	if(Yum::hasModule('registration') 
+			&& Yum::module('registration')->enableRecovery)
+	echo ' | ';
+	if(Yum::hasModule('registration') 
+			&& Yum::module('registration')->enableRecovery) 
+	echo CHtml::link(Yum::t("Lost password?"),
+			Yum::module('registration')->recoveryUrl);
+	?>
+</p>
 	</div>
 
-	<div class="row submit">
-		<?php echo CHtml::submitButton(UserModule::t("Login")); ?>
-	</div>
-	
+<div class="row rememberMe">
+<?php echo CHtml::activeCheckBox($model,'rememberMe', array('style' => 'display: inline;')); ?>
+<?php echo CHtml::activeLabelEx($model,'rememberMe', array('style' => 'display: inline;')); ?>
+</div>
+
+<div class="row submit">
+<?php echo CHtml::submitButton(Yum::t('Login')); ?>
+</div>
+
 <?php echo CHtml::endForm(); ?>
 </div><!-- form -->
 
-
 <?php
 $form = new CForm(array(
-    'elements'=>array(
-        'username'=>array(
-            'type'=>'text',
-            'maxlength'=>32,
-        ),
-        'password'=>array(
-            'type'=>'password',
-            'maxlength'=>32,
-        ),
-        'rememberMe'=>array(
-            'type'=>'checkbox',
-        )
-    ),
+			'elements'=>array(
+				'username'=>array(
+					'type'=>'text',
+					'maxlength'=>32,
+					),
+				'password'=>array(
+					'type'=>'password',
+					'maxlength'=>32,
+					),
+				'rememberMe'=>array(
+					'type'=>'checkbox',
+					)
+				),
 
-    'buttons'=>array(
-        'login'=>array(
-            'type'=>'submit',
-            'label'=>'Login',
-        ),
-    ),
-), $model);
+			'buttons'=>array(
+				'login'=>array(
+					'type'=>'submit',
+					'label'=>'Login',
+					),
+				),
+			), $model);
 ?>
+
